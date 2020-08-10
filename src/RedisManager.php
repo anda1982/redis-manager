@@ -56,6 +56,9 @@ class RedisManager extends Extension
      */
     protected $connection;
 
+
+    protected $prefix_len;
+
     /**
      * Get instance of redis manager.
      *
@@ -80,6 +83,8 @@ class RedisManager extends Extension
     public function __construct($connection = 'default')
     {
         $this->connection = $connection;
+        $prefix = config('database.redis.options.prefix','');
+        $this->prefix_len = strlen($prefix);
     }
 
     /**
@@ -160,6 +165,11 @@ class RedisManager extends Extension
         return $this->getConnection()->info();
     }
 
+
+    private function removePrefix($key){
+        return $this->prefix_len > 0 ? \substr($key,$this->prefix_len) : $key;
+    }
+
     /**
      * Scan keys in redis by giving pattern.
      *
@@ -174,7 +184,7 @@ class RedisManager extends Extension
         $keys = [];
 
         foreach (new Keyspace($client->client(), $pattern) as $item) {
-            $keys[] = $item;
+            $keys[] = $this->removePrefix($item);
 
             if (count($keys) == $count) {
                 break;
@@ -204,6 +214,7 @@ LUA;
      */
     public function fetch($key)
     {
+        $key = $this->removePrefix($key);
         if (!$this->getConnection()->exists($key)) {
             return [];
         }
@@ -229,6 +240,7 @@ LUA;
     public function update(Request $request)
     {
         $key = $request->get('key');
+        $key = $this->removePrefix($key);
         $type = $request->get('type');
 
         /** @var DataType $class */
@@ -251,7 +263,9 @@ LUA;
         if (is_string($key)) {
             $key = [$key];
         }
-
+        $key = array_map(function($_key){
+            return $this->removePrefix($_key);
+        },$key);
         return $this->getConnection()->del($key);
     }
 
